@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = ROOT / "streamers.json"
 DEFAULT_POSTED = ROOT / "posted.json"
 DEFAULT_DRAFTS = ROOT / "drafts"
+DEFAULT_CLIPS = ROOT / "clips"
 
 
 def load_env(path=ROOT / ".env"):
@@ -257,9 +258,23 @@ def main(argv=None):
     f.add_argument("--out", default=str(DEFAULT_DRAFTS))
     m = sub.add_parser("mark-posted", help="Record clips you've posted so they aren't suggested again")
     m.add_argument("clip_ids", nargs="+")
+    d = sub.add_parser("download", help="Download clips and make vertical 9:16 versions")
+    d.add_argument("targets", nargs="*", help="Clip URLs or IDs")
+    d.add_argument("--from-drafts", help="Download every clip linked in a drafts file")
+    d.add_argument("--out", default=str(DEFAULT_CLIPS))
+    d.add_argument("--mode", choices=["blur", "crop", "none"], default="blur",
+                   help="blur: full frame over blurred background; crop: fill and cut sides; none: keep original")
     args = p.parse_args(argv)
     if args.cmd == "find":
         find(args)
+    elif args.cmd == "download":
+        from clipfinder import download
+        targets = list(args.targets)
+        if args.from_drafts:
+            targets += download.urls_from_drafts(args.from_drafts)
+        if not targets:
+            p.error("give clip URLs/IDs or --from-drafts")
+        download.download(targets, args.out, args.mode)
     else:
         mark_posted(args)
 

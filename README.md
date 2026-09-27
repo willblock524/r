@@ -30,7 +30,17 @@ python -m unittest                                  # run tests
 
 ## Getting the video file
 
-The Twitch API's [Get Clips Download](https://dev.twitch.tv/docs/api/reference/#get-clips-download) endpoint only works for users the streamer has made an **editor** on their channel. So the tool gives you the clip link, and you get the file from the streamer or their clipping program, or through editor access if they grant it.
+`download` pulls clips straight from Twitch with [yt-dlp](https://github.com/yt-dlp/yt-dlp) and makes a 1080x1920 vertical version with ffmpeg.
+
+```
+pip install -r requirements.txt
+python -m clipfinder.finder download --from-drafts drafts/2026-09-27.md   # every clip in a drafts file
+python -m clipfinder.finder download <clip_url_or_id> --mode crop        # specific clips
+```
+
+Files go to `clips/`: `<id>.mp4` is the original, `<id>_reel.mp4` is the vertical version. Modes: `blur` (default, full frame over a blurred background), `crop` (fill the screen, sides cut off), `none` (original only).
+
+> **Terms of Service:** Twitch's [Terms of Service](https://legal.twitch.com/en/legal/terms-of-service/) say users may not engage in "downloading (except page caching) of any portion of the Twitch Services ... except as expressly permitted on the Twitch Services" or "distribution, public performance or public display of any Materials." This command does both. The only official download route, [Get Clips Download](https://dev.twitch.tv/docs/api/reference/#get-clips-download), is limited to a streamer's channel editors.
 
 ## Posting checklist
 
