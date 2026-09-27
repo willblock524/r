@@ -101,6 +101,23 @@ class FinderTests(unittest.TestCase):
         self.assertIn("category: Just Chatting", text)
         self.assertIn("none recorded", text)
 
+    def test_max_drafts_and_exclude_streamers(self):
+        self.config["streamers"] = []
+        self.config["defaults"].update({"max_drafts": 2, "exclude_streamers": ["Streamer9"]})
+        self.config["discover"] = {"enabled": True, "categories": ["Just Chatting"], "top_games": 0,
+                                   "clips_per_category": 5}
+        self.write_config()
+        client = FakeClient(by_game={"g1": [
+            clip("z", 950000, broadcaster="9"), clip("x", 900000, broadcaster="7"),
+            clip("y", 800000, broadcaster="8"), clip("w", 700000, broadcaster="6"),
+        ]})
+        drafts = finder.find(self.args, client=client, now=self.now)
+        self.assertEqual([d[0]["id"] for d in drafts], ["x", "y"])
+
+    def test_caption_hashtags_deduped(self):
+        caption = finder.build_caption(clip("a", 100), "twitch", ["#twitch", "#clips"])
+        self.assertTrue(caption.endswith("#twitch #clips"))
+
     def test_mark_posted(self):
         finder.mark_posted(Namespace(posted=self.tmp / "posted.json", clip_ids=["a", "b"]))
         self.assertEqual(set(json.loads((self.tmp / "posted.json").read_text())), {"posted1", "a", "b"})

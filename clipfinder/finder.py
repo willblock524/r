@@ -131,7 +131,7 @@ def build_caption(clip, login, hashtags):
         f"Clipped by: {clip['creator_name']}",
         f"Original clip: {clip['url']}",
         "",
-        " ".join(hashtags + [f"#{login}"]),
+        " ".join(dict.fromkeys(hashtags + [f"#{login}"])),
     ]
     return "\n".join(lines)
 
@@ -192,11 +192,14 @@ def find(args, client=None, now=None):
     seen = set(posted)
     per_streamer = {}
     max_per_streamer = defaults.get("max_clips_per_streamer")
+    excluded = {x.lower() for x in defaults.get("exclude_streamers", [])}
     candidates = []  # (clip, source, permission, hashtags)
 
     def take(clips, settings, source, permission, hashtags):
         for clip in select_clips(clips, settings, seen):
             bid = clip["broadcaster_id"]
+            if clip["broadcaster_name"].lower() in excluded:
+                continue
             if max_per_streamer and per_streamer.get(bid, 0) >= max_per_streamer:
                 continue
             per_streamer[bid] = per_streamer.get(bid, 0) + 1
@@ -231,6 +234,8 @@ def find(args, client=None, now=None):
         drafts.append((clip, login, source, permission, build_caption(clip, login, hashtags)))
 
     drafts.sort(key=lambda d: d[0]["view_count"], reverse=True)
+    if defaults.get("max_drafts"):
+        drafts = drafts[:defaults["max_drafts"]]
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"{now:%Y-%m-%d}.md"

@@ -2,18 +2,20 @@
   "defaults": {
     "require_permission": false,
     "days": 7,
-    "min_views": 50000,
+    "min_views": 10000,
     "max_duration_seconds": 90,
     "clips_per_streamer": 5,
     "max_clips_per_streamer": 2,
+    "max_drafts": 30,
+    "exclude_streamers": ["twitch"],
     "language": "en",
     "hashtags": ["#twitch", "#streamer", "#clips"]
   },
   "discover": {
     "enabled": true,
     "categories": ["Just Chatting", "IRL"],
-    "top_games": 10,
-    "clips_per_category": 10
+    "top_games": 30,
+    "clips_per_category": 20
   },
   "streamers": [
     {

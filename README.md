@@ -10,6 +10,7 @@ Finds the most-viewed recent Twitch clips and writes Instagram post drafts (link
 - **Discovery** (`discover` in `streamers.json`): searches the named categories (Just Chatting, IRL) plus Twitch's current top games by live viewers, so it finds viral clips from any streamer. Category names must exactly match Twitch's; unknown names are ignored.
 - **Streamer list** (`streamers`): optionally add specific streamers to always check. With `require_permission: true`, only ones with a `permission_source` are searched.
 - `max_clips_per_streamer` stops one streamer from filling the whole batch.
+- `max_drafts` keeps only the top N clips by views (30 by default). `exclude_streamers` skips channels such as Twitch's own.
 - Filters: time window (`days`), minimum views, max length, language, and clips per streamer. You can override any default per streamer.
 - Clips you've already posted are recorded in `posted.json` so they aren't suggested again.
 
