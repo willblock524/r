@@ -1,0 +1,19 @@
+{
+  "defaults": {
+    "days": 7,
+    "min_views": 50000,
+    "max_duration_seconds": 90,
+    "clips_per_streamer": 5,
+    "language": "en",
+    "hashtags": ["#twitch", "#streamer", "#clips"]
+  },
+  "streamers": [
+    {
+      "login": "example_streamer",
+      "enabled": false,
+      "permission_source": "",
+      "permission_notes": "Link to the streamer's public statement, clipping program page, or your written permission. Leave enabled=false until this is filled in.",
+      "hashtags": []
+    }
+  ]
+}
