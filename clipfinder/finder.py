@@ -1,8 +1,8 @@
-"""Find top-viewed Twitch clips from permitted streamers and write Instagram post drafts.
+"""Find top-viewed Twitch clips and write Instagram post drafts.
 
 Uses the official Twitch Helix API:
   https://dev.twitch.tv/docs/api/reference/#get-clips
-Clips requested by broadcaster_id come back sorted by view count, descending.
+Clips requested by broadcaster_id or game_id come back sorted by view count, descending.
 """
 
 import argparse
@@ -66,20 +66,39 @@ class TwitchClient:
         data = self.get("users", {"login": logins})["data"]
         return {u["login"].lower(): u for u in data}
 
-    def top_clips(self, broadcaster_id, started_at, ended_at, first):
-        return self.get("clips", {
-            "broadcaster_id": broadcaster_id,
-            "started_at": started_at,
-            "ended_at": ended_at,
-            "first": first,
-        })["data"]
+    def logins_by_id(self, ids):
+        ids = list(ids)
+        out = {}
+        for i in range(0, len(ids), 100):
+            for u in self.get("users", {"id": ids[i:i + 100]})["data"]:
+                out[u["id"]] = u["login"]
+        return out
+
+    def game_ids(self, names, top_n):
+        ids = {}
+        if names:
+            for g in self.get("games", {"name": names})["data"]:
+                ids[g["id"]] = g["name"]
+        if top_n:
+            for g in self.get("games/top", {"first": top_n})["data"]:
+                ids.setdefault(g["id"], g["name"])
+        return ids
+
+    def top_clips(self, started_at, ended_at, first, broadcaster_id=None, game_id=None):
+        params = {"started_at": started_at, "ended_at": ended_at, "first": first}
+        if broadcaster_id:
+            params["broadcaster_id"] = broadcaster_id
+        else:
+            params["game_id"] = game_id
+        return self.get("clips", params)["data"]
 
 
 def permitted_streamers(config):
-    """Only streamers that are enabled AND have a recorded permission source."""
+    """Enabled streamers; when require_permission is on, only those with a permission source."""
+    require = config.get("defaults", {}).get("require_permission", True)
     out, skipped = [], []
     for s in config.get("streamers", []):
-        if s.get("enabled") and s.get("permission_source", "").strip():
+        if s.get("enabled") and (not require or s.get("permission_source", "").strip()):
             out.append(s)
         else:
             skipped.append(s.get("login", "?"))
@@ -103,8 +122,7 @@ def select_clips(clips, settings, posted_ids):
     return picked
 
 
-def build_caption(clip, streamer, hashtags):
-    login = streamer["login"]
+def build_caption(clip, login, hashtags):
     lines = [
         clip["title"].strip(),
         "",
@@ -121,7 +139,7 @@ def render_markdown(drafts, generated_at):
     out = [f"# Clip drafts ({generated_at:%Y-%m-%d %H:%M} UTC)", ""]
     if not drafts:
         out.append("No clips matched the filters.")
-    for i, (clip, streamer, caption) in enumerate(drafts, 1):
+    for i, (clip, login, source, permission, caption) in enumerate(drafts, 1):
         out += [
             f"## {i}. {clip['broadcaster_name']}: {clip['title']}",
             "",
@@ -130,7 +148,8 @@ def render_markdown(drafts, generated_at):
             f"- Length: {clip['duration']:.0f}s",
             f"- Created: {clip['created_at']}",
             f"- Link: {clip['url']}",
-            f"- Permission: {streamer['permission_source']}",
+            f"- Found via: {source}",
+            f"- Permission: {permission or 'none recorded'}",
             "",
             "Caption:",
             "",
@@ -154,8 +173,9 @@ def find(args, client=None, now=None):
     streamers, skipped = permitted_streamers(config)
     if skipped:
         print(f"Skipping (disabled or no permission_source): {', '.join(skipped)}", file=sys.stderr)
-    if not streamers:
-        print("No permitted streamers configured in streamers.json.", file=sys.stderr)
+    discover = config.get("discover", {})
+    if not streamers and not discover.get("enabled"):
+        print("No streamers enabled and discovery is off in streamers.json.", file=sys.stderr)
         return []
 
     if client is None:
@@ -166,26 +186,48 @@ def find(args, client=None, now=None):
         client = TwitchClient(cid, secret)
 
     now = now or datetime.now(timezone.utc)
+    stamp = lambda d: d.strftime("%Y-%m-%dT%H:%M:%SZ")
     posted = read_posted(Path(args.posted))
-    users = client.user_ids([s["login"] for s in streamers])
+    seen = set(posted)
+    per_streamer = {}
+    max_per_streamer = defaults.get("max_clips_per_streamer")
+    candidates = []  # (clip, source, permission, hashtags)
 
-    drafts = []
+    def take(clips, settings, source, permission, hashtags):
+        for clip in select_clips(clips, settings, seen):
+            bid = clip["broadcaster_id"]
+            if max_per_streamer and per_streamer.get(bid, 0) >= max_per_streamer:
+                continue
+            per_streamer[bid] = per_streamer.get(bid, 0) + 1
+            seen.add(clip["id"])
+            candidates.append((clip, source, permission, hashtags))
+
+    users = client.user_ids([s["login"] for s in streamers])
     for s in streamers:
         settings = {**defaults, **{k: v for k, v in s.items() if k in defaults and k != "hashtags"}}
         user = users.get(s["login"].lower())
         if not user:
             print(f"Twitch user not found: {s['login']}", file=sys.stderr)
             continue
-        start = now - timedelta(days=settings["days"])
-        clips = client.top_clips(
-            user["id"],
-            start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            100,
-        )
-        hashtags = defaults.get("hashtags", []) + s.get("hashtags", [])
-        for clip in select_clips(clips, settings, posted):
-            drafts.append((clip, s, build_caption(clip, s, hashtags)))
+        clips = client.top_clips(stamp(now - timedelta(days=settings["days"])), stamp(now), 100,
+                                 broadcaster_id=user["id"])
+        take(clips, settings, f"streamer list ({s['login']})", s.get("permission_source", ""),
+             defaults.get("hashtags", []) + s.get("hashtags", []))
+
+    if discover.get("enabled"):
+        settings = {**defaults, **{k: v for k, v in discover.items() if k in defaults}}
+        settings["clips_per_streamer"] = discover.get("clips_per_category", 10)
+        games = client.game_ids(discover.get("categories", []), discover.get("top_games", 0))
+        for game_id, name in games.items():
+            clips = client.top_clips(stamp(now - timedelta(days=settings["days"])), stamp(now), 100,
+                                     game_id=game_id)
+            take(clips, settings, f"category: {name}", "", defaults.get("hashtags", []))
+
+    logins = client.logins_by_id({c[0]["broadcaster_id"] for c in candidates}) if candidates else {}
+    drafts = []
+    for clip, source, permission, hashtags in candidates:
+        login = logins.get(clip["broadcaster_id"], clip["broadcaster_name"].lower())
+        drafts.append((clip, login, source, permission, build_caption(clip, login, hashtags)))
 
     drafts.sort(key=lambda d: d[0]["view_count"], reverse=True)
     out_dir = Path(args.out)

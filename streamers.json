@@ -1,18 +1,25 @@
 {
   "defaults": {
+    "require_permission": false,
     "days": 7,
     "min_views": 50000,
     "max_duration_seconds": 90,
     "clips_per_streamer": 5,
+    "max_clips_per_streamer": 2,
     "language": "en",
     "hashtags": ["#twitch", "#streamer", "#clips"]
+  },
+  "discover": {
+    "enabled": true,
+    "categories": ["Just Chatting", "IRL"],
+    "top_games": 10,
+    "clips_per_category": 10
   },
   "streamers": [
     {
       "login": "example_streamer",
       "enabled": false,
       "permission_source": "",
-      "permission_notes": "Link to the streamer's public statement, clipping program page, or your written permission. Leave enabled=false until this is filled in.",
       "hashtags": []
     }
   ]
